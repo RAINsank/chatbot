@@ -18,7 +18,13 @@ with st.sidebar:
     api_base_url = st.text_input("API 基础地址", value="https://sg.uiuiapi.com/v1")
     model_name = st.selectbox(
         "模型",
-        options=["gpt-4o-mini", "gpt-4.1-mini", "gpt-3.5-turbo"],
+        options=[
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-4o-mini",
+            "gpt-4.1-mini",
+            "gpt-3.5-turbo",
+        ],
         index=0,
     )
     temperature = st.slider("温度系数", min_value=0.0, max_value=2.0, value=0.7, step=0.1)
