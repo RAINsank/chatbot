@@ -1,59 +1,101 @@
 import streamlit as st
 from openai import OpenAI
 
+st.set_page_config(page_title="Chatbot Plus", page_icon="💬", layout="wide")
+
 # Show title and description.
-st.title("💬 Chatbot")
+st.title("💬 Chatbot Plus")
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    "A richer chatbot demo with model tuning, system prompt control, and chat history export."
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+with st.sidebar:
+    st.header("Settings")
+    openai_api_key = st.text_input("OpenAI API Key", type="password")
+    api_base_url = st.text_input("API Base URL", value="https://sg.uiuiapi.com/v1")
+    model_name = st.selectbox(
+        "Model",
+        options=["gpt-4o-mini", "gpt-4.1-mini", "gpt-3.5-turbo"],
+        index=0,
+    )
+    temperature = st.slider("Temperature", min_value=0.0, max_value=2.0, value=0.7, step=0.1)
+    max_tokens = st.slider("Max Tokens", min_value=64, max_value=4096, value=1024, step=64)
+    system_prompt = st.text_area(
+        "System Prompt",
+        value="You are a helpful assistant. Answer clearly and concisely.",
+        height=100,
+    )
+    show_debug = st.checkbox("Show debug info", value=False)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+    with col2:
+        chat_text = "\n\n".join(
+            f'{m["role"].upper()}: {m["content"]}' for m in st.session_state.messages
+        )
+        st.download_button(
+            "Export .txt",
+            data=chat_text or "No messages yet.",
+            file_name="chat_history.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+
 if not openai_api_key:
     st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+    st.stop()
 
-    # Create an OpenAI client.
-    client = OpenAI(
-                 api_key=openai_api_key,
-                 base_url="https://sg.uiuiapi.com/v1"     # ←←← 改成对应平台的 base_url
-             )
+# Create an OpenAI client.
+client = OpenAI(api_key=openai_api_key, base_url=api_base_url)
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if show_debug:
+    st.caption(
+        f"Current model: `{model_name}` | Temperature: `{temperature}` | Max tokens: `{max_tokens}`"
+    )
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+if system_prompt.strip():
+    with st.expander("Current system prompt"):
+        st.code(system_prompt.strip())
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# Display the existing chat messages via `st.chat_message`.
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+# Create a chat input field to allow the user to enter a message.
+if prompt := st.chat_input("Ask me anything..."):
+    # Store and display the current prompt.
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
+    # Build request messages with an optional system prompt.
+    request_messages = []
+    if system_prompt.strip():
+        request_messages.append({"role": "system", "content": system_prompt.strip()})
+    request_messages.extend(
+        {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
+    )
+
+    try:
         # Generate a response using the OpenAI API.
         stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
+            model=model_name,
+            messages=request_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
             stream=True,
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
+        # Stream the response to the chat and store it in session state.
         with st.chat_message("assistant"):
             response = st.write_stream(stream)
         st.session_state.messages.append({"role": "assistant", "content": response})
+    except Exception as exc:
+        st.error(f"Request failed: {exc}")
