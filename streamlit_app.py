@@ -19,7 +19,7 @@ else:
 
     # Create an OpenAI client.
     client = OpenAI(
-                 api_key=api_key,
+                 api_key=openai_api_key,
                  base_url="https://sg.uiuiapi.com/v1"     # ←←← 改成对应平台的 base_url
              )
 
